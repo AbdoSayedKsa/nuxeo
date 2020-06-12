@@ -156,6 +156,9 @@ pipeline {
               perl -i -pe 's|<version>.*?</version>|<version>${nextVersion}</version>|' parent/pom.xml
               mvn ${MAVEN_ARGS} -f parent/pom.xml validate
 
+              # nuxeo-promote-packages POM
+              perl -i -pe 's|<version>.*?</version>|<version>${nextVersion}</version>|' ci/release/pom.xml
+
               git commit -a -m "Release ${RELEASE_VERSION}, update ${CURRENT_VERSION} to ${nextVersion}"
             """
 
@@ -219,7 +222,7 @@ pipeline {
               mvn ${MAVEN_ARGS} -f ci/release/pom.xml process-resources
 
               # Upload Nuxeo packages
-              PACKAGES_TO_UPLOAD="ci/release/target/nuxeo-*-package-*.zip"
+              PACKAGES_TO_UPLOAD="ci/release/target/packages/nuxeo-*-package-*.zip"
               for file in \$PACKAGES_TO_UPLOAD ; do
                 curl --fail -i -u "$CONNECT_PASS" -F package=@\$(ls \$file) "$CONNECT_PROD_URL"/site/marketplace/upload?batch=true ;
               done
