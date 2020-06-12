@@ -164,7 +164,8 @@ pipeline {
                 jx step git credentials
                 git config credential.helper store
 
-                git push --all origin
+                git push origin master
+                git push origin v${RELEASE_VERSION}
               """
             }
           }
