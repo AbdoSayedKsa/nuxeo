@@ -127,6 +127,9 @@
       <input type="hidden" name="source" value="home">
       <input type="submit" value="Upload" id="upload" onclick="$.fn.clickButton(this)">
     </form>
+    <a class="button primary" href="${Root.path}/_admin">
+      Manage Distributions
+    </a>
   </div>
 </#if>
 
