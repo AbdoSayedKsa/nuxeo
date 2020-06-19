@@ -19,6 +19,9 @@
 package org.nuxeo.apidoc.documentation;
 
 import java.util.LinkedList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.nuxeo.ecm.platform.htmlsanitizer.HtmlSanitizerService;
@@ -46,6 +49,12 @@ public class DocumentationHelper {
     private static final String CODE_END = "</code></pre>";
 
     private static final String AUTHOR = "@author";
+
+    private static final List<String> SECURE_KEYWORDS = List.of("password", "Password", "secret", "apiKey");
+
+    private static final List<String> WHITELISTED_KEYWORDS = List.of("passwordField", "passwordHashAlgorithm");
+
+    private static final String SECRET_VALUE = "********";
 
     // utility class
     private DocumentationHelper() {
@@ -134,15 +143,43 @@ public class DocumentationHelper {
      * Makes sure no passwords are embedded in the XML.
      */
     public static String secureXML(String xml) {
-        if (xml == null || !xml.contains("assword")) {
+        if (StringUtils.isBlank(xml)) {
             return xml;
         }
-        xml = xml.replaceAll("<([a-zA-Z]*[pP])assword>[^<]*</([a-zA-Z]*)assword>", "<$1assword>********</$2assword>");
-        // attributes: nuxeo-core-auth
-        xml = xml.replaceAll("([a-zA-Z]*[pP])assword=\"[^\"]*\"", "$1assword=\"********\"");
-        // property: default-repository-config
-        xml = xml.replaceAll("([a-zA-Z]*[pP])assword\">[^<]*<", "$1assword\">********<");
-        return xml;
+        String res = xml;
+        for (String kw : SECURE_KEYWORDS) {
+            if (res.contains(kw)) {
+                for (String pattern : List.of(
+                        // node startswith
+                        String.format("(?<start><(?<key>\\w*%s)\\s*>)[^<]*(?<end></\\w*%s>)", kw, kw),
+                        // node endswith
+                        String.format("(?<start><(?<key>%s\\w*)\\s*>)[^<]*(?<end></%s\\w*>)", kw, kw),
+                        // attributes startswith
+                        String.format("(?<start>(?<key>\\w*%s)=\")[^\"]*(?<end>\")", kw),
+                        String.format("(?<start>(?<key>\\w*%s)\"\\s*>)[^<]*(?<end><)", kw),
+                        // attributes endswith
+                        String.format("(?<start>(?<key>%s\\w*)=\")[^\"]*(?<end>\")", kw),
+                        String.format("(?<start>(?<key>%s\\w*)\"\\s*>)[^<]*(?<end><)", kw))) {
+                    res = secureXML(res, pattern, WHITELISTED_KEYWORDS);
+                }
+            }
+        }
+        return res;
+    }
+
+    protected static String secureXML(String xml, String pattern, List<String> whitelist) {
+        StringBuffer result = new StringBuffer();
+        Matcher m = Pattern.compile(pattern).matcher(xml);
+        while (m.find()) {
+            String replacement;
+            if (whitelist.contains(m.group("key"))) {
+                replacement = m.group();
+            } else {
+                replacement = m.group("start") + SECRET_VALUE + m.group("end");
+            }
+            m.appendReplacement(result, replacement);
+        }
+        return m.appendTail(result).toString();
     }
 
 }
