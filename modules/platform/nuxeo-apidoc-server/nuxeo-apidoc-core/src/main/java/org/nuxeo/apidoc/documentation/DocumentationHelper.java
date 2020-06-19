@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 import org.apache.commons.lang3.StringUtils;
 import org.nuxeo.ecm.platform.htmlsanitizer.HtmlSanitizerService;
 import org.nuxeo.runtime.api.Framework;
+import org.nuxeo.runtime.services.config.ConfigurationService;
 
 /**
  * Helper to generate HTML for documentation strings.
@@ -50,9 +51,13 @@ public class DocumentationHelper {
 
     private static final String AUTHOR = "@author";
 
-    private static final List<String> SECURE_KEYWORDS = List.of("password", "Password", "secret", "apiKey");
+    private static final String SECURE_KEYWORDS_PROPERTY = "org.nuxeo.apidoc.secure.xml.keywords";
 
-    private static final List<String> WHITELISTED_KEYWORDS = List.of("passwordField", "passwordHashAlgorithm");
+    private static final List<String> DEFAULT_SECURE_KEYWORDS = List.of("password", "Password", "secret", "apiKey");
+
+    private static final String WHITELISTED_KEYWORDS_PROPERTY = "org.nuxeo.apidoc.secure.xml.keywords.whitelisted";
+
+    private static final List<String> DEFAULT_WHITELISTED_KEYWORDS = List.of("passwordField", "passwordHashAlgorithm");
 
     private static final String SECRET_VALUE = "********";
 
@@ -147,7 +152,9 @@ public class DocumentationHelper {
             return xml;
         }
         String res = xml;
-        for (String kw : SECURE_KEYWORDS) {
+        List<String> keywords = getKeywordList(SECURE_KEYWORDS_PROPERTY, DEFAULT_SECURE_KEYWORDS);
+        List<String> whitelist = getKeywordList(WHITELISTED_KEYWORDS_PROPERTY, DEFAULT_WHITELISTED_KEYWORDS);
+        for (String kw : keywords) {
             if (res.contains(kw)) {
                 for (String pattern : List.of(
                         // node startswith
@@ -160,7 +167,7 @@ public class DocumentationHelper {
                         // attributes endswith
                         String.format("(?<start>(?<key>%s\\w*)=\")[^\"]*(?<end>\")", kw),
                         String.format("(?<start>(?<key>%s\\w*)\"\\s*>)[^<]*(?<end><)", kw))) {
-                    res = secureXML(res, pattern, WHITELISTED_KEYWORDS);
+                    res = secureXML(res, pattern, whitelist);
                 }
             }
         }
@@ -180,6 +187,14 @@ public class DocumentationHelper {
             m.appendReplacement(result, replacement);
         }
         return m.appendTail(result).toString();
+    }
+
+    protected static List<String> getKeywordList(String property, List<String> defaultValue) {
+        return Framework.getService(ConfigurationService.class)
+                        .getString(property)
+                        .map(v -> v.split("\\s*,[,\\s]*"))
+                        .map(List::of)
+                        .orElse(defaultValue);
     }
 
 }
