@@ -19,14 +19,10 @@
 package org.nuxeo.apidoc.documentation;
 
 import java.util.LinkedList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.nuxeo.ecm.platform.htmlsanitizer.HtmlSanitizerService;
 import org.nuxeo.runtime.api.Framework;
-import org.nuxeo.runtime.services.config.ConfigurationService;
 
 /**
  * Helper to generate HTML for documentation strings.
@@ -50,16 +46,6 @@ public class DocumentationHelper {
     private static final String CODE_END = "</code></pre>";
 
     private static final String AUTHOR = "@author";
-
-    private static final String SECURE_KEYWORDS_PROPERTY = "org.nuxeo.apidoc.secure.xml.keywords";
-
-    private static final List<String> DEFAULT_SECURE_KEYWORDS = List.of("password", "Password", "secret", "apiKey");
-
-    private static final String WHITELISTED_KEYWORDS_PROPERTY = "org.nuxeo.apidoc.secure.xml.keywords.whitelisted";
-
-    private static final List<String> DEFAULT_WHITELISTED_KEYWORDS = List.of("passwordField", "passwordHashAlgorithm");
-
-    private static final String SECRET_VALUE = "********";
 
     // utility class
     private DocumentationHelper() {
@@ -141,60 +127,7 @@ public class DocumentationHelper {
         if (sanitizer != null) {
             html = sanitizer.sanitizeString(html, null);
         }
-        return secureXML(html);
-    }
-
-    /**
-     * Makes sure no passwords are embedded in the XML.
-     */
-    public static String secureXML(String xml) {
-        if (StringUtils.isBlank(xml)) {
-            return xml;
-        }
-        String res = xml;
-        List<String> keywords = getKeywordList(SECURE_KEYWORDS_PROPERTY, DEFAULT_SECURE_KEYWORDS);
-        List<String> whitelist = getKeywordList(WHITELISTED_KEYWORDS_PROPERTY, DEFAULT_WHITELISTED_KEYWORDS);
-        for (String kw : keywords) {
-            if (res.contains(kw)) {
-                for (String pattern : List.of(
-                        // node startswith
-                        String.format("(?<start><(?<key>\\w*%s)\\s*>)[^<]*(?<end></\\w*%s>)", kw, kw),
-                        // node endswith
-                        String.format("(?<start><(?<key>%s\\w*)\\s*>)[^<]*(?<end></%s\\w*>)", kw, kw),
-                        // attributes startswith
-                        String.format("(?<start>(?<key>\\w*%s)=\")[^\"]*(?<end>\")", kw),
-                        String.format("(?<start>(?<key>\\w*%s)\"\\s*>)[^<]*(?<end><)", kw),
-                        // attributes endswith
-                        String.format("(?<start>(?<key>%s\\w*)=\")[^\"]*(?<end>\")", kw),
-                        String.format("(?<start>(?<key>%s\\w*)\"\\s*>)[^<]*(?<end><)", kw))) {
-                    res = secureXML(res, pattern, whitelist);
-                }
-            }
-        }
-        return res;
-    }
-
-    protected static String secureXML(String xml, String pattern, List<String> whitelist) {
-        StringBuffer result = new StringBuffer();
-        Matcher m = Pattern.compile(pattern).matcher(xml);
-        while (m.find()) {
-            String replacement;
-            if (whitelist.contains(m.group("key"))) {
-                replacement = m.group();
-            } else {
-                replacement = m.group("start") + SECRET_VALUE + m.group("end");
-            }
-            m.appendReplacement(result, replacement);
-        }
-        return m.appendTail(result).toString();
-    }
-
-    protected static List<String> getKeywordList(String property, List<String> defaultValue) {
-        return Framework.getService(ConfigurationService.class)
-                        .getString(property)
-                        .map(v -> v.split("\\s*,[,\\s]*"))
-                        .map(List::of)
-                        .orElse(defaultValue);
+        return SecureXMLHelper.secure(html);
     }
 
 }

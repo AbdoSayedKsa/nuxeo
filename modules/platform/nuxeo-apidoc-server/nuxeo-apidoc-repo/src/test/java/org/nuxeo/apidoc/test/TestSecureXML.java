@@ -20,10 +20,15 @@
 package org.nuxeo.apidoc.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.util.List;
+
+import javax.xml.stream.XMLStreamException;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.nuxeo.apidoc.documentation.DocumentationHelper;
+import org.nuxeo.apidoc.documentation.SecureXMLHelper;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
@@ -34,137 +39,220 @@ import org.nuxeo.runtime.test.runner.RuntimeFeature;
 @Deploy("org.nuxeo.apidoc.repo:OSGI-INF/snapshot-service-framework.xml")
 public class TestSecureXML {
 
+    protected void check(String expected, String xml) {
+        checkStAX(expected, xml);
+        checkRegexp(expected, xml);
+        // check fallback
+        assertEquals(expected, SecureXMLHelper.secure(xml));
+    }
+
+    protected void checkStAX(String expected, String xml) {
+        try {
+            assertEquals(expected, SecureXMLHelper.secureStAX(xml, SecureXMLHelper.getKeywords(),
+                    SecureXMLHelper.getWhitelistedKeywords()));
+        } catch (XMLStreamException e) {
+            fail(e.getMessage());
+        }
+    }
+
+    protected void checkRegexp(String expected, String xml) {
+        assertEquals(expected, SecureXMLHelper.secureRegexp(xml, SecureXMLHelper.getKeywords(),
+                SecureXMLHelper.getWhitelistedKeywords()));
+    }
+
     @Test
     public void testSecureXMLNode() throws Exception {
-        assertEquals("<password>********</password>", DocumentationHelper.secureXML("<password>p1</password>"));
+        check("<password>********</password>", "<password>p1</password>");
+    }
+
+    @Test
+    public void testSecureXMLNodeDeclaration() throws Exception {
+        check("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<password>********</password>",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<password>p1</password>");
     }
 
     @Test
     public void testSecureXMLNodeSpace() throws Exception {
-        assertEquals("<password >********</password>", DocumentationHelper.secureXML("<password >p1</password>"));
+        String xml = "<password >p1</password>";
+        checkStAX("<password>********</password>", xml);
+        checkRegexp("<password >********</password>", xml);
     }
 
     @Test
     public void testSecureXMLStartNode() throws Exception {
-        assertEquals("<passwordExample>********</passwordExample>",
-                DocumentationHelper.secureXML("<passwordExample>password</passwordExample>"));
+        check("<passwordExample>********</passwordExample>", "<passwordExample>password</passwordExample>");
     }
 
     @Test
     public void testSecureXMLEndNode() throws Exception {
-        assertEquals("<examplePassword>********</examplePassword>",
-                DocumentationHelper.secureXML("<examplePassword>password</examplePassword>"));
+        check("<examplePassword>********</examplePassword>", "<examplePassword>password</examplePassword>");
     }
 
     @Test
     public void testSecureXMLWhitelistedNode() throws Exception {
-        assertEquals("<passwordField>password</passwordField>",
-                DocumentationHelper.secureXML("<passwordField>password</passwordField>"));
+        check("<passwordField>password</passwordField>", "<passwordField>password</passwordField>");
     }
 
     @Test
     public void testSecureXMLAttribute() throws Exception {
-        assertEquals("<prop name=\"password\">********</prop>",
-                DocumentationHelper.secureXML("<prop name=\"password\">password</prop>"));
+        check("<prop name=\"password\">********</prop>", "<prop name=\"password\">password</prop>");
     }
 
     @Test
     public void testSecureXMLAttributSpace() throws Exception {
-        assertEquals("<prop name=\"password\" >********</prop>",
-                DocumentationHelper.secureXML("<prop name=\"password\" >password</prop>"));
+        String xml = "<prop name=\"password\" >password</prop>";
+        checkStAX("<prop name=\"password\">********</prop>", xml);
+        checkRegexp("<prop name=\"password\" >********</prop>", xml);
     }
 
     @Test
     public void testSecureXMLAttribute2() throws Exception {
-        assertEquals("<prop password=\"********\">foo</prop>",
-                DocumentationHelper.secureXML("<prop password=\"password\">foo</prop>"));
+        check("<prop password=\"********\">foo</prop>", "<prop password=\"password\">foo</prop>");
+    }
+
+    @Test
+    public void testSecureXMLAttribute2SpaceAndTabs() throws Exception {
+        String xml = "<prop password = \t\t \"password\"    >foo</prop>";
+        checkStAX("<prop password=\"********\">foo</prop>", xml);
+        checkRegexp("<prop password = \t\t \"password\"    >********</prop>", xml);
     }
 
     @Test
     public void testSecureXMLAttribute3() throws Exception {
-        assertEquals("<prop password=\"********\" foo=\"bar\" />",
-                DocumentationHelper.secureXML("<prop password=\"password\" foo=\"bar\" />"));
+        String xml = "<prop password=\"password\" foo=\"bar\" />";
+        checkStAX("<prop password=\"********\" foo=\"bar\"></prop>", xml);
+        checkRegexp("<prop password=\"********\" foo=\"bar\" />", xml);
+    }
+
+    @Test
+    public void testSecureXMLAttribute4() throws Exception {
+        String xml = "<prop what=\"baz\" foo=\"bar\" />";
+        checkStAX("<prop what=\"baz\" foo=\"bar\"></prop>", xml);
+        checkRegexp(xml, xml);
     }
 
     @Test
     public void testSecureXMLStartAttribute() throws Exception {
-        assertEquals("<prop name=\"passwordExample\">********</prop>",
-                DocumentationHelper.secureXML("<prop name=\"passwordExample\">password</prop>"));
+        check("<prop name=\"passwordExample\">********</prop>", "<prop name=\"passwordExample\">password</prop>");
     }
 
     @Test
     public void testSecureXMLStartAttributeSpace() throws Exception {
-        assertEquals("<prop name=\"passwordExample\" >********</prop>",
-                DocumentationHelper.secureXML("<prop name=\"passwordExample\" >password</prop>"));
+        String xml = "<prop name=\"passwordExample\" >password</prop>";
+        checkStAX("<prop name=\"passwordExample\">********</prop>", xml);
+        checkRegexp("<prop name=\"passwordExample\" >********</prop>", xml);
     }
 
     @Test
     public void testSecureXMLStartAttribute2() throws Exception {
-        assertEquals("<prop passwordExample=\"********\">********</prop>",
-                DocumentationHelper.secureXML("<prop passwordExample=\"password\">foo</prop>"));
+        String xml = "<prop passwordExample=\"password\">foo</prop>";
+        checkStAX("<prop passwordExample=\"********\">foo</prop>", xml);
+        checkRegexp("<prop passwordExample=\"********\">********</prop>", xml);
     }
 
     @Test
     public void testSecureXMLStartAttribute3() throws Exception {
-        assertEquals("<prop passwordExample=\"********\" foo=\"bar\">baz</prop>",
-                DocumentationHelper.secureXML("<prop passwordExample=\"password\" foo=\"bar\">baz</prop>"));
+        String xml = "<prop passwordExample=\"password\" foo=\"bar\">baz</prop>";
+        checkStAX("<prop foo=\"bar\" passwordExample=\"********\">baz</prop>", xml);
+        checkRegexp("<prop passwordExample=\"********\" foo=\"bar\">baz</prop>", xml);
     }
 
     @Test
     public void testSecureXMLEndAttribute() throws Exception {
-        assertEquals("<prop name=\"passwordExample\">********</prop>",
-                DocumentationHelper.secureXML("<prop name=\"passwordExample\">password</prop>"));
+        check("<prop name=\"passwordExample\">********</prop>", "<prop name=\"passwordExample\">password</prop>");
     }
 
     @Test
     public void testSecureXMLEndAttributeSpace() throws Exception {
-        assertEquals("<prop name=\"passwordExample\" >********</prop>",
-                DocumentationHelper.secureXML("<prop name=\"passwordExample\" >password</prop>"));
+        String xml = "<prop name=\"passwordExample\" >password</prop>";
+        checkStAX("<prop name=\"passwordExample\">********</prop>", xml);
+        checkRegexp("<prop name=\"passwordExample\" >********</prop>", xml);
     }
 
     @Test
     public void testSecureXMLEndAttribute2() throws Exception {
-        assertEquals("<prop passwordExample=\"********\">********</prop>",
-                DocumentationHelper.secureXML("<prop passwordExample=\"password\">foo</prop>"));
+        String xml = "<prop passwordExample=\"password\">foo</prop>";
+        checkStAX("<prop passwordExample=\"********\">foo</prop>", xml);
+        checkRegexp("<prop passwordExample=\"********\">********</prop>", xml);
     }
 
     @Test
     public void testSecureXMLEndAttribute3() throws Exception {
-        assertEquals("<prop passwordExample=\"********\" foo=\"bar\" />",
-                DocumentationHelper.secureXML("<prop passwordExample=\"password\" foo=\"bar\" />"));
+        String xml = "<prop passwordExample=\"password\" foo=\"bar\" />";
+        checkStAX("<prop foo=\"bar\" passwordExample=\"********\"></prop>", xml);
+        checkRegexp("<prop passwordExample=\"********\" foo=\"bar\" />", xml);
     }
 
     @Test
     public void testSecureXMLWhitelistedAttribute() throws Exception {
-        assertEquals("<prop name=\"passwordField\">password</prop>",
-                DocumentationHelper.secureXML("<prop name=\"passwordField\">password</prop>"));
+        check("<prop name=\"passwordField\">password</prop>", "<prop name=\"passwordField\">password</prop>");
     }
 
     @Test
     public void testSecureXMLWhitelistedAttributeSpace() throws Exception {
-        assertEquals("<prop name=\"passwordField\" >password</prop>",
-                DocumentationHelper.secureXML("<prop name=\"passwordField\" >password</prop>"));
+        String xml = "<prop name=\"passwordField\" >password</prop>";
+        checkStAX("<prop name=\"passwordField\">password</prop>", xml);
+        checkRegexp("<prop name=\"passwordField\" >password</prop>", xml);
     }
 
     @Test
     public void testSecureXMLWhitelistedAttribute2() throws Exception {
-        assertEquals("<prop passwordField=\"password\">********</prop>",
-                DocumentationHelper.secureXML("<prop passwordField=\"password\">foo</prop>"));
+        check("<prop passwordField=\"password\">********</prop>", "<prop passwordField=\"password\">foo</prop>");
     }
 
     @Test
     public void testSecureXMLWhitelistedAttribute3() throws Exception {
-        assertEquals("<prop passwordField=\"password\" foo=\"bar\"/>",
-                DocumentationHelper.secureXML("<prop passwordField=\"password\" foo=\"bar\"/>"));
+        String xml = "<prop passwordField=\"password\" foo=\"bar\"/>";
+        checkStAX("<prop foo=\"bar\" passwordField=\"password\"></prop>", xml);
+        checkRegexp("<prop passwordField=\"password\" foo=\"bar\"/>", xml);
     }
 
     @Test
     public void testSecureXML() throws Exception {
+        assertEquals(SecureXMLHelper.DEFAULT_KEYWORDS, SecureXMLHelper.getKeywords());
+        assertEquals(SecureXMLHelper.DEFAULT_WHITELISTED_KEYWORDS, SecureXMLHelper.getWhitelistedKeywords());
+        String xml = "<root>\n" //
+                + "<password>p1</password>\n" //
+                + " <myPassword>p2</myPassword>\n" //
+                + " <yo password=\"p3\" other=\"bla\" />\n" //
+                + " <yo otherPassword=\"p4\" other=\"bla\" />\n" //
+                + " <prop name=\"password\">p5</prop>\n" //
+                + " <prop name=\"realPassword\">p6</prop>\n" //
+                + " <prop name=\"realPassword\" >p6</prop>\n" //
+                + " <prop name=\"passwordNotWhitelisted\">p7</prop>\n" //
+                + " <prop name=\"passwordField\">ok</prop>\n" //
+                + " <secret>${nuxeo.jwt.secret}</secret>\n" //
+                + " <secretKey>${nuxeo.aws.secretKey}</secretKey>\n" //
+                + " <option name=\"apiKey\">${metrics.datadog.apiKey}</option>\n" //
+                + " <passwordField>password</passwordField>\n" //
+                + " <passwordHashAlgorithm>SSHA</passwordHashAlgorithm>\n" //
+                + "</root>";
+        String expected = "<root>\n" //
+                + "<password>********</password>\n" //
+                + " <myPassword>********</myPassword>\n" //
+                + " <yo password=\"********\" other=\"bla\"></yo>\n" //
+                + " <yo other=\"bla\" otherPassword=\"********\"></yo>\n" //
+                + " <prop name=\"password\">********</prop>\n" //
+                + " <prop name=\"realPassword\">********</prop>\n" //
+                + " <prop name=\"realPassword\">********</prop>\n" //
+                + " <prop name=\"passwordNotWhitelisted\">********</prop>\n" //
+                + " <prop name=\"passwordField\">ok</prop>\n" //
+                + " <secret>********</secret>\n" //
+                + " <secretKey>********</secretKey>\n" //
+                + " <option name=\"apiKey\">********</option>\n" //
+                + " <passwordField>password</passwordField>\n" //
+                + " <passwordHashAlgorithm>SSHA</passwordHashAlgorithm>\n" //
+                + "</root>";
+        checkStAX(expected, xml);
+    }
+
+    @Test
+    public void testSecureXMLInvalid() throws Exception {
         String xml = "foo <password>p1</password>\n" //
                 + " <myPassword>p2</myPassword>\n" //
                 + " <myPassword >p2</myPassword>\n" //
-                + " <yo password=\"p3\" other=\"bla\">\n" //
-                + " <yo otherPassword=\"p4\" other=\"bla\">\n" //
+                + " <yo password=\"p3\" other=\"bla\">\n" // not closed
+                + " <yo otherPassword=\"p4\" other=\"bla\">content</yo>\n" //
                 + " <prop name=\"password\">p5</prop>\n" //
                 + " <prop name=\"realPassword\">p6</prop>\n" //
                 + " <prop name=\"realPassword\" >p6</prop>\n" //
@@ -179,7 +267,7 @@ public class TestSecureXML {
                 + " <myPassword>********</myPassword>\n" //
                 + " <myPassword >********</myPassword>\n" //
                 + " <yo password=\"********\" other=\"bla\">\n" //
-                + " <yo otherPassword=\"********\" other=\"bla\">\n" //
+                + " <yo otherPassword=\"********\" other=\"bla\">content</yo>\n" //
                 + " <prop name=\"password\">********</prop>\n" //
                 + " <prop name=\"realPassword\">********</prop>\n" //
                 + " <prop name=\"realPassword\" >********</prop>\n" //
@@ -190,25 +278,31 @@ public class TestSecureXML {
                 + " <option name=\"apiKey\">********</option>\n" //
                 + " <passwordField>password</passwordField>\n" //
                 + " <passwordHashAlgorithm>SSHA</passwordHashAlgorithm>";
-        assertEquals(expected, DocumentationHelper.secureXML(xml));
+        checkRegexp(expected, xml);
     }
 
     @Test
     @Deploy("org.nuxeo.apidoc.repo.test:apidoc-secure-xml-test-contrib.xml")
     public void testSecureXMLOverride() throws Exception {
-        String xml = "foo <password>p1</password>\n" //
+        assertEquals(List.of("secret", "apiKey"), SecureXMLHelper.getKeywords());
+        assertEquals(List.of("apiKeyPublic"), SecureXMLHelper.getWhitelistedKeywords());
+        String xml = "<root>\n" //
+                + " <password>p1</password>\n" //
                 + " <myPassword>p2</myPassword>\n" //
                 + " <secret>${nuxeo.jwt.secret}</secret>\n" //
                 + " <secretKey>${nuxeo.aws.secretKey}</secretKey>\n" //
                 + " <option name=\"apiKey\">${metrics.datadog.apiKey}</option>\n" //
-                + " <apiKeyPublic>password</apiKeyPublic>";
-        String expected = "foo <password>p1</password>\n" //
+                + " <apiKeyPublic>password</apiKeyPublic>\n" //
+                + "</root>";
+        String expected = "<root>\n" //
+                + " <password>p1</password>\n" //
                 + " <myPassword>p2</myPassword>\n" //
                 + " <secret>********</secret>\n" //
                 + " <secretKey>********</secretKey>\n" //
                 + " <option name=\"apiKey\">********</option>\n" //
-                + " <apiKeyPublic>password</apiKeyPublic>";
-        assertEquals(expected, DocumentationHelper.secureXML(xml));
+                + " <apiKeyPublic>password</apiKeyPublic>\n" //
+                + "</root>";
+        check(expected, xml);
     }
 
 }
